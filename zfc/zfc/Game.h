@@ -1,5 +1,7 @@
 #include<iostream>
 #include<vector>
+#include<queue>
+#include<list>
 #include<string>
 #include<sstream>
 #include<ctime>
@@ -8,6 +10,40 @@
 #include "sendCmd.h"
 
 using namespace std;
+
+
+
+/********
+astar结点类型
+**********/
+class ANode
+{
+public:
+	int x;
+	int y;
+	int step;
+	int remain;
+	int total;
+	struct ANode* parent;
+
+	ANode(int _x, int _y, int _step, int _remain, ANode* _parent=NULL)
+	{
+		x = _x;
+		y = _y;
+		step = _step;
+		remain = _remain;
+		total = step + remain;
+		parent = _parent;
+	}
+
+	bool operator<(const ANode &a) const{
+		return total > a.total;
+	}
+};
+
+
+
+
 
 /*******************************
 游戏类
@@ -39,6 +75,8 @@ private:
 		int y;
 		Move move;
 	};
+
+
 	/**********
 	客户端角色类型
 	**********/
@@ -61,6 +99,8 @@ private:
 	int policeNum;					//警察数量
 	int thiefNum;					//小偷数量
 
+	bool hasEnemy;
+
 	vector<Node> polices;			//警察 k号位置存储id=k的警察数据（位置XY，下一步应该如何移动等）
 	vector<Node> thiefs;			//小偷 k号位置存储id=k的小偷数据（位置XY，下一步应该如何移动等）
 
@@ -73,6 +113,15 @@ private:
 	void analyzeINF(string s);		//分析INF命令
 	string buildMOV();				//根据role类型，读取polices/thiefs里数据构建 MOV指令
 	void computeMove();				//计算下一步移动
+	void policeMove();				//计算警察下一步
+	void thiefMove();				//计算小偷下一步
+
+	//Astar算法和相关辅助方法
+	int astar(int x1, int y1, int x2, int y2); //Astar算法 	return int:0=east, 1=south, 2=west, 3=north, 4=keep
+	void astar_InsertList(list<ANode*> &list, ANode* node);
+	ANode* astar_RemoveList(list<ANode*> &list, int x, int y, int step, ANode* parent);
+	void astar_UpdateList(list<ANode*> &list, int x, int y, int step, ANode* parent);
+
 
 public:
 	void setRole(string str);		//设置客户端的角色类型
