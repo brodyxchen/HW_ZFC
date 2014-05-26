@@ -358,7 +358,7 @@ void Game::thiefMove()
 }
 
 //===========================================================================
-///	计算警察扫描线 (横向与纵向)
+///	计算警察扫描线 (横向与纵向)  与螺旋扫描用到的距离数组  和计算出谁负责螺旋扫描
 //===========================================================================
 void Game::calcScanLine()
 {
@@ -422,7 +422,7 @@ void Game::calcScanLine()
 	}
 
 	//初始化螺旋搜索的距离
-	helixDists.resize(201,0);
+	helixDists.resize(402,0);
 	for(int i = 0; i < helixDists.size(); i++)
 	{
 		helixDists[i] = (i/2)+1;
@@ -456,6 +456,7 @@ void Game::policeScan()
 	for(int i = 0; i < polices.size(); i++)
 	{
 		if(i == soloPolice) continue;
+
 		if(polices[i].isHorizScan)
 		{
 			if(polices[i].scanToPreX == -1 || polices[i].scanToPreY == -1)
@@ -583,6 +584,9 @@ void Game::policeScan()
 	helixScan();
 }
 
+//===========================================================================
+///	警察螺旋扫描算法
+//===========================================================================
 void Game::helixScan()
 {
 	if(polices[soloPolice].scanToPreX == -1 || polices[soloPolice].scanToPreY == -1)

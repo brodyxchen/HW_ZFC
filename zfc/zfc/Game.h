@@ -104,18 +104,20 @@ private:
 
 	vector<Node> polices;			//警察 k号位置存储id=k的警察数据（位置XY，下一步应该如何移动等）
 	int lockedPolice;				//追击的警察Id，其他围捕
-	int soloPolice;
-	Move soloDirect;
-	vector<int> helixDists;
-	int helixDistIndex;
+
+	int soloPolice;					//某个特殊警察Id (一个离中心最近的警察负责从中心开始的螺旋形扫描，其他负责刷子扫描)
+	Move soloDirect;				//螺旋方向
+	vector<int> helixDists;			//记录螺旋的距离 （1,1,2,2,3,3,4,4,5,5...）
+	int helixDistIndex;				//螺旋距离数组的索引
 
 	vector<Node> thiefs;			//小偷
 	int lockedThief;				//被追击的小偷Id
 
-	vector<vector<int> > scanHorLine;
-	vector<vector<int> > scanVerLine;
-	vector<int> scanHorIndex;
-	vector<int> scanVerIndex;
+
+	vector<vector<int> > scanHorLine;		//水平扫描线
+	vector<vector<int> > scanVerLine;		//垂直扫描线
+	vector<int> scanHorIndex;				//水平扫描索引
+	vector<int> scanVerIndex;				//垂直扫描索引
 
 
 public:
@@ -153,16 +155,16 @@ private:
 	//============================================================================
 	// 警察的移动
 	//============================================================================
-	void policeScan();
-	void helixScan();
-	void policePursue();
+	void policeScan();				//警察扫描（刷子法）
+	void helixScan();				//螺旋扫描（螺旋法），只有一个警察使用
+	void policePursue();			//警察追捕
 
 
 	//============================================================================
 	// 小偷的移动
 	//============================================================================
-	void thiefScan();
-	void thiefEscape();
+	void thiefScan();				//小偷扫描
+	void thiefEscape();				//小偷逃脱
 
 	//============================================================================
 	// 计算移动的辅助函数
@@ -170,7 +172,7 @@ private:
 	void findValidPositionAroundXY(int x, int y, int& outx, int& outy, bool isThief=false);						//搜索(x,y)及其周围最近的有效位置，赋值给tox,toy
 	bool findValidNeighborByDirect(int x, int y, Move direct, int& outx, int& outy, bool isRecursion=false);	//搜索(x,y)在指定方向的一步可达位置，若不存在，则顺时针换方向寻找			
 	double calcRadian(int x, int y, int centerx, int centery, Move move);										//计算向量夹角：向量(center->xy) 与 向量(move)的夹角
-	void calcScanLine();
+	void calcScanLine();																						//计算扫描线和螺旋距离与负责螺旋扫描的警察等
 
 
 
