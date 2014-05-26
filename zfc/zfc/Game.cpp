@@ -86,6 +86,11 @@ void Game::splitIdXY(string str, vector<Node> &outList)
 {
 	int start = 0;
 	int end = 0;
+	for(int i = 0; i < outList.size(); i++)
+	{
+		outList[i].visible = false;
+	}
+
 	while(start < str.length())
 	{
 		end = str.find(',', start);
@@ -140,6 +145,8 @@ void Game::analyzeINI(string s)
 		polices[i].scanToX = -1;
 		polices[i].scanToY = -1;
 		polices[i].directHoriz = false;
+		if(mapHeight >= mapWidth) polices[i].isHorizScan = true;
+		else polices[i].isHorizScan = false;
 	}
 	thiefs.resize(thiefNum);
 	for(int i = 0; i < thiefNum; i++)
@@ -154,6 +161,8 @@ void Game::analyzeINI(string s)
 		thiefs[i].scanToX = -1;
 		thiefs[i].scanToY = -1;
 		thiefs[i].directHoriz = false;
+		if(mapHeight >= mapWidth) polices[i].isHorizScan = true;
+		else polices[i].isHorizScan = false;
 	}
 
 	start = s.find('<', end+1)+1;
@@ -167,6 +176,8 @@ void Game::analyzeINI(string s)
 		splitIdXY(s.substr(start,end-start), thiefs);
 	}
 
+	if(role == Roles::PoliceClient)
+		calcScanLine();
 }
 
 //===========================================================================
@@ -207,9 +218,26 @@ void Game::analyzeINF(string s)
 	if(role == Roles::PoliceClient)
 	{
 		if(end-start > 0)
+		{
+			if(hasEnemy)
+			{
+				if(lockedThief >= 0 && lockedThief < thiefs.size() && thiefs[lockedThief].visible)
+				{
+
+				}else
+				{
+					lockedThief = -1;
+					lockedPolice = -1;
+				}
+			}
 			hasEnemy = true;
+		}
 		else
+		{
 			hasEnemy = false;
+			lockedThief = -1;
+			lockedPolice = -1;
+		}
 	}
 
 	//视距范围地图信息
@@ -295,7 +323,6 @@ void Game::policeMove()
 {
 	if(hasEnemy)
 	{
-
 		policePursue();
 	}else
 	{
@@ -309,6 +336,7 @@ void Game::policeMove()
 //===========================================================================
 void Game::thiefMove()				
 {
+
 	if(hasEnemy)
 	{
 		thiefEscape();
@@ -320,42 +348,203 @@ void Game::thiefMove()
 }
 
 //===========================================================================
+///	计算警察扫描线 (横向与纵向)
+//===========================================================================
+void Game::calcScanLine()
+{
+	int rangeWidth = (2*policeRange+1);
+	int bandWidth = polices.size() * rangeWidth;
+
+
+	int lineNum = mapHeight / bandWidth * 2;
+	if(lineNum == 0) lineNum = 2;
+
+	scanHorLine.resize(polices.size(), vector<int>(lineNum,0));
+	scanHorIndex.resize(polices.size(),0);
+
+	for(int i = 0; i < scanHorLine.size(); i++)
+	{
+		for(int j = 0; j < scanHorLine[0].size() / 2; j++)
+		{//正向线
+			scanHorLine[i][j] = j * bandWidth + i * rangeWidth + policeRange;
+			if(scanHorLine[i][j] >= mapHeight)
+			{
+				int more = scanHorLine[i][j] - mapHeight;
+				scanHorLine[i][j] = mapHeight - 1 - more;
+			}
+		}
+		for(int j = scanHorLine[0].size() / 2; j < scanHorLine[0].size(); j++)
+		{//负向线
+			scanHorLine[i][j] = (mapHeight-(j-lineNum/2)*bandWidth  -1) - (i * rangeWidth + policeRange);
+			if(scanHorLine[i][j] < 0)
+			{
+				scanHorLine[i][j] = -scanHorLine[i][j];
+			}
+
+		}
+	}
+
+	lineNum = mapWidth / bandWidth * 2;
+	if(lineNum == 0) lineNum = 2;
+
+	scanVerLine.resize(polices.size(), vector<int>(lineNum,0));
+	scanVerIndex.resize(polices.size(),0);
+
+	for(int i = 0; i < scanVerLine.size(); i++)
+	{
+		for(int j = 0; j < scanVerLine[0].size() / 2; j++)
+		{//正向线
+			scanVerLine[i][j] = j * bandWidth + i * rangeWidth + policeRange;
+			if(scanVerLine[i][j] >= mapWidth)
+			{
+				int more = scanVerLine[i][j] - mapWidth;
+				scanVerLine[i][j] = mapWidth - 1 - more;
+			}
+		}
+		for(int j = scanVerLine[0].size() / 2; j < scanVerLine[0].size(); j++)
+		{//负向线
+			scanVerLine[i][j] = (mapWidth-(j-lineNum/2)*bandWidth  -1) - (i * rangeWidth + policeRange);
+			if(scanVerLine[i][j] < 0)
+			{
+				scanVerLine[i][j] = -scanVerLine[i][j];
+			}
+		}
+	}
+
+}
+
+
+//===========================================================================
 ///	警察扫描算法
 //===========================================================================
 void Game::policeScan()
 {
 	int rangeWidth = (2*policeRange+1);
+	int bandWidth = polices.size() * rangeWidth;
+	int maxVerBand = mapWidth / bandWidth;
+	int maxHorBand = mapHeight / bandWidth;
+
 
 	for(int i = 0; i < polices.size(); i++)
 	{
-		if(polices[i].scanToPreX == -1 || polices[i].scanToPreY == -1)
-		{//初始
-			if(abs(polices[i].x) < abs(mapWidth-polices[i].x))
-			{
-				polices[i].scanToPreX = policeRange;
-			}else
-			{
-				polices[i].scanToPreX = mapWidth-1-policeRange;
-			}
-			polices[i].scanToPreY = policeRange + i * rangeWidth;
-			findValidPositionAroundXY(polices[i].scanToPreX, polices[i].scanToPreY, polices[i].scanToX, polices[i].scanToY);
-		}
-		if(map[polices[i].scanToY][polices[i].scanToX] == MapType::Block)
-		{//若目标之前为未知区域，现在为不可访问（block），则重新搜索周边空白区域
-			findValidPositionAroundXY(polices[i].scanToX, polices[i].scanToY, polices[i].scanToX, polices[i].scanToY);
-		}
-		astar(polices[i].x, polices[i].y, polices[i].scanToX, polices[i].scanToY, polices[i].move);	//计算
-		if(abs(polices[i].x-polices[i].scanToX) + abs(polices[i].y-polices[i].scanToY) <= 1)
-		{//完成
-			polices[i].directHoriz = !(polices[i].directHoriz);
-			if(polices[i].directHoriz)
-			{
-				polices[i].scanToPreX = mapWidth-1-polices[i].scanToPreX;
+		if(polices[i].isHorizScan)
+		{
+			if(polices[i].scanToPreX == -1 || polices[i].scanToPreY == -1)
+			{//初始时
+				scanHorIndex[i] = polices[i].y / bandWidth;
+				if(polices[i].y >= mapHeight / 2)
+				{
+					if(scanHorIndex[i] > scanHorLine[0].size()/2)
+						scanHorIndex[i] = scanHorLine[0].size()-1 - scanHorIndex[i];
+				}
+
+				polices[i].scanToPreX = polices[i].x;
+				polices[i].scanToPreY = scanHorLine[i][scanHorIndex[i]];
 				findValidPositionAroundXY(polices[i].scanToPreX, polices[i].scanToPreY, polices[i].scanToX, polices[i].scanToY);
-			}else
-			{
-				polices[i].scanToPreY += rangeWidth*polices.size();
-				polices[i].scanToPreY %= mapHeight;
+
+				polices[i].directHoriz = false;
+
+				if(polices[i].scanToY == polices[i].y)
+				{//若当前就在这个位置，则重新计算位置  水平
+					if(polices[i].x < mapWidth-polices[i].x)
+					{
+						polices[i].scanToPreX = mapWidth-1-policeRange;
+					}else
+					{
+						polices[i].scanToPreX = policeRange;
+					}
+					findValidPositionAroundXY(polices[i].scanToPreX, polices[i].scanToPreY, polices[i].scanToX, polices[i].scanToY);
+					polices[i].directHoriz = true;
+				}
+			}
+
+			if(map[polices[i].scanToY][polices[i].scanToX] == MapType::Block)
+			{//若目标之前为未知区域，现在为不可访问（block），则重新搜索周边空白区域
+				findValidPositionAroundXY(polices[i].scanToPreX, polices[i].scanToPreY, polices[i].scanToX, polices[i].scanToY);
+			}
+			astar(polices[i].x, polices[i].y, polices[i].scanToX, polices[i].scanToY, polices[i].move);	//计算
+
+			if(abs(polices[i].x-polices[i].scanToX) + abs(polices[i].y-polices[i].scanToY) <= 1)
+			{//完成
+				polices[i].directHoriz = !(polices[i].directHoriz);
+				if(polices[i].directHoriz)
+				{
+					polices[i].scanToPreX = mapWidth-1-polices[i].scanToPreX;
+				}else
+				{
+					scanHorIndex[i]++;
+					if(scanHorIndex[i] == scanHorLine[0].size()/2 || scanHorIndex[i] >= scanHorLine[0].size())
+					{
+						polices[i].isHorizScan = !(polices[i].isHorizScan);
+						polices[i].scanToPreX = -1;
+						polices[i].scanToPreY = -1;
+					}else
+					{
+						scanHorIndex[i] %= 2*maxHorBand;
+						polices[i].scanToPreY = scanHorLine[i][scanHorIndex[i]];
+					}
+
+
+				}
+				findValidPositionAroundXY(polices[i].scanToPreX, polices[i].scanToPreY, polices[i].scanToX, polices[i].scanToY);
+			}
+		}else
+		{
+			if(polices[i].scanToPreX == -1 || polices[i].scanToPreY == -1)
+			{//初始时
+				scanVerIndex[i] = polices[i].x / bandWidth;
+				if(polices[i].x >= mapWidth / 2)
+				{
+					if(scanVerIndex[i] > scanVerLine[0].size()/2)
+						scanVerIndex[i] = scanVerLine.size() - scanVerIndex[i];
+				}
+				polices[i].scanToPreX = scanVerLine[i][scanVerIndex[i]];
+				polices[i].scanToPreY = polices[i].y;
+				findValidPositionAroundXY(polices[i].scanToPreX, polices[i].scanToPreY, polices[i].scanToX, polices[i].scanToY);
+
+				polices[i].directHoriz = true;
+
+				if(polices[i].scanToX == polices[i].x)
+				{//若当前就在这个位置，则重新计算位置  垂直
+					if(polices[i].y < mapHeight-polices[i].y)
+					{
+						polices[i].scanToPreY = mapHeight-1-policeRange;
+					}else
+					{
+						polices[i].scanToPreY = policeRange;
+					}
+					findValidPositionAroundXY(polices[i].scanToPreX, polices[i].scanToPreY, polices[i].scanToX, polices[i].scanToY);
+					polices[i].directHoriz = false;
+				}
+			}
+
+			if(map[polices[i].scanToY][polices[i].scanToX] == MapType::Block)
+			{//若目标之前为未知区域，现在为不可访问（block），则重新搜索周边空白区域
+				findValidPositionAroundXY(polices[i].scanToPreX, polices[i].scanToPreY, polices[i].scanToX, polices[i].scanToY);
+			}
+			astar(polices[i].x, polices[i].y, polices[i].scanToX, polices[i].scanToY, polices[i].move);	//计算
+
+			if(abs(polices[i].x-polices[i].scanToX) + abs(polices[i].y-polices[i].scanToY) <= 1)
+			{//完成
+				polices[i].directHoriz = !(polices[i].directHoriz);
+				if(polices[i].directHoriz)
+				{
+					scanVerIndex[i]++;
+					if(scanVerIndex[i] == scanVerLine.size()/2 || scanVerIndex[i] >= scanVerLine.size())
+					{
+						polices[i].isHorizScan = !(polices[i].isHorizScan);
+						polices[i].scanToPreX = -1;
+						polices[i].scanToPreY = -1;
+					}else
+					{
+						scanVerIndex[i] %= 2*maxVerBand;
+						polices[i].scanToPreX = scanVerLine[i][scanVerIndex[i]];
+					}
+				}else
+				{
+					polices[i].scanToPreY = mapHeight-1-polices[i].scanToPreY;
+
+				}
 				findValidPositionAroundXY(polices[i].scanToPreX, polices[i].scanToPreY, polices[i].scanToX, polices[i].scanToY);
 			}
 
@@ -617,6 +806,12 @@ void Game::findValidPositionAroundXY(int x, int y, int& outx, int& outy, bool is
 //===========================================================================
 bool Game::findValidNeighborByDirect(int x, int y, Move direct, int& outx, int& outy, bool isRecursion)
 {
+	if(direct == Move::Keep)
+	{
+		outx = x;
+		outy = y;
+		return true;
+	}
 	int movex[] = {1,0,-1,0};
 	int movey[] = {0,1,0,-1};
 	int newx = x + movex[direct];
@@ -750,7 +945,7 @@ void Game::astar(int x1, int y1, int x2, int y2, Move& outMove, bool isThief)
 							newNode->total = newNode->step + newNode->remain;
 							newNode->parent = node;
 							tempIter = openList.insert(newNode);
-							marks[newy][newx] == 1;
+							marks[newy][newx] = 1;
 							stores[newy][newx] = tempIter;
 						}
 

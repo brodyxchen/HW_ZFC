@@ -59,7 +59,9 @@ private:
 		int scanToPreY;
 		int scanToX;		//扫描时准确的方位(大概方位周围的空白区域)
 		int scanToY;
-		bool directHoriz;	//是否在水平的扫描
+		bool directHoriz;	//当前是否在扫描水平线
+
+		bool isHorizScan;	//总体上，是在做横向还是纵向扫描
 	};
 
 	//============================================================================
@@ -104,6 +106,11 @@ private:
 	int lockedPolice;				//追击的警察Id，其他围捕
 	vector<Node> thiefs;			//小偷
 	int lockedThief;				//被追击的小偷Id
+
+	vector<vector<int> > scanHorLine;
+	vector<vector<int> > scanVerLine;
+	vector<int> scanHorIndex;
+	vector<int> scanVerIndex;
 
 
 public:
@@ -156,7 +163,7 @@ private:
 	void findValidPositionAroundXY(int x, int y, int& outx, int& outy, bool isThief=false);						//搜索(x,y)及其周围最近的有效位置，赋值给tox,toy
 	bool findValidNeighborByDirect(int x, int y, Move direct, int& outx, int& outy, bool isRecursion=false);	//搜索(x,y)在指定方向的一步可达位置，若不存在，则顺时针换方向寻找			
 	double calcRadian(int x, int y, int centerx, int centery, Move move);										//计算向量夹角：向量(center->xy) 与 向量(move)的夹角
-
+	void calcScanLine();
 
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
