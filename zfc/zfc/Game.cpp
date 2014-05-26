@@ -1,6 +1,9 @@
 #include "stdafx.h"
 #include "Game.h"
 
+//===========================================================================
+///	设置客户端角色
+//===========================================================================
 void Game::setRole(string str)
 {
 	if(str == "POL")
@@ -12,17 +15,53 @@ void Game::setRole(string str)
 	}
 }
 
-void Game::splitXY(string str, int &x, int &y)
+//===========================================================================
+///	接收INI指令
+//===========================================================================
+void Game::receiveINI(char* str)
+{
+	string s(str);
+	analyzeINI(s);
+}
+
+//===========================================================================
+///	接收INF指令
+//===========================================================================
+void Game::receiveINF(char* str)
+{
+	string s(str);
+	analyzeINF(s);
+	computeMove();
+}
+
+//===========================================================================
+///	发送MOV指令
+//===========================================================================
+void Game::sendMOV()
+{
+	string str = buildMOV();
+	char* s = const_cast<char*>(str.c_str());
+	sendMoveToServer(s);
+}
+
+
+//===========================================================================
+///	分割"X,Y"型字符串
+//===========================================================================
+void Game::splitXY(string str, int &outx, int &outy)
 {
 	int start = 0;
 	int middle = str.find(',');
 	int end = str.length();
 
-	x = stoi(str.substr(start, middle));
-	y = stoi(str.substr(middle+1, end));
+	outx = stoi(str.substr(start, middle));
+	outy = stoi(str.substr(middle+1, end));
 }
 
-void Game::splitXYs(string str, vector<vector<int> > &table)
+//===========================================================================
+///	分割"X,Y;X,Y;X,Y;..."型字符串
+//===========================================================================
+void Game::splitXYs(string str, vector<vector<MapType> > &outTable)
 {
 	int start = 0;
 	int end = 0;
@@ -36,11 +75,14 @@ void Game::splitXYs(string str, vector<vector<int> > &table)
 		int y = stoi(str.substr(start, end-start));
 		start = end + 1;
 		
-		table[y][x] = MapType::Block;
+		outTable[y][x] = MapType::Block;
 	}
 }
 
-void Game::splitIdXY(string str, vector<Node> &list)
+//===========================================================================
+///	分割"Id,X,Y;Id,X,Y;Id,X,Y;..."型字符串
+//===========================================================================
+void Game::splitIdXY(string str, vector<Node> &outList)
 {
 	int start = 0;
 	int end = 0;
@@ -58,20 +100,22 @@ void Game::splitIdXY(string str, vector<Node> &list)
 		int y = stoi(str.substr(start, end-start));
 		start = end + 1;
 
-		list[id].x = x;
-		list[id].y = y;
+		outList[id].x = x;
+		outList[id].y = y;
+		outList[id].visible = true;
 	}
 }
 
+//===========================================================================
+///	分析INI指令
+//===========================================================================
 void Game::analyzeINI(string s)
 {
-	//string s(str);
-
 	int start = s.find('[')+1;
 	int end = s.find(']', start);
 	splitXY(s.substr(start,end-start), mapWidth, mapHeight);
 
-	map.resize(mapHeight, vector<int>(mapWidth,MapType::Unknown));
+	map.resize(mapHeight, vector<MapType>(mapWidth,MapType::Unknown));
 
 	start = s.find('<', end+1)+1;
 	end = s.find('>', start);
@@ -79,36 +123,66 @@ void Game::analyzeINI(string s)
 
 	start = s.find('(', end+1)+1;
 	end = s.find(')', start);
+	int policeNum = 0;
+	int thiefNum = 0;
 	splitXY(s.substr(start,end-start), policeNum, thiefNum);
 
 	polices.resize(policeNum);
+	for(int i = 0; i < policeNum; i++)
+	{
+		polices[i].x = -1;
+		polices[i].y = -1;
+		polices[i].move = Move::Keep;
+		polices[i].visible = false;
+
+		polices[i].scanToPreX = -1;
+		polices[i].scanToPreY = -1;
+		polices[i].scanToX = -1;
+		polices[i].scanToY = -1;
+		polices[i].directHoriz = false;
+	}
 	thiefs.resize(thiefNum);
+	for(int i = 0; i < thiefNum; i++)
+	{
+		thiefs[i].x = -1;
+		thiefs[i].y = -1;
+		thiefs[i].move = Move::Keep;
+		thiefs[i].visible = false;
+
+		thiefs[i].scanToPreX = -1;
+		thiefs[i].scanToPreY = -1;
+		thiefs[i].scanToX = -1;
+		thiefs[i].scanToY = -1;
+		thiefs[i].directHoriz = false;
+	}
 
 	start = s.find('<', end+1)+1;
 	end = s.find('>', start);
 	if(role == Roles::PoliceClient)
 	{
 		splitIdXY(s.substr(start,end-start), polices);
-		for(int i = 0; i < thiefNum; i++)
-		{
-			thiefs[i].x = -1;
-			thiefs[i].y = -1;
-		}
 	}
 	else 
 	{
 		splitIdXY(s.substr(start,end-start), thiefs);
-		for(int i = 0; i < policeNum; i++)
-		{
-			polices[i].x = -1;
-			polices[i].y = -1;
-		}
 	}
 
 }
+
+//===========================================================================
+///	分析INF指令
+//===========================================================================
 void Game::analyzeINF(string s)
 {
-	//string s(str);
+	for(int i = 0; i < polices.size(); i++)
+	{
+		polices[i].visible = false;
+	}
+	for(int i = 0; i < thiefs.size(); i++)
+	{
+		thiefs[i].visible = false;
+	}
+
 
 	int start = s.find('[')+1;
 	int end = s.find(']', start);
@@ -118,18 +192,24 @@ void Game::analyzeINF(string s)
 	end = s.find(')', start);
 	splitIdXY(s.substr(start,end-start), polices);
 
-	if(role == Roles::ThiefClient && end-start > 1)
+	if(role == Roles::ThiefClient)
 	{
-		hasEnemy = true;
+		if(end-start > 0)
+			hasEnemy = true;
+		else
+			hasEnemy = false;
 	}
 
 	start = s.find('<', end+1)+1;
 	end = s.find('>', start);
 	splitIdXY(s.substr(start,end-start), thiefs);
 
-	if(role == Roles::ThiefClient && end-start > 1)
+	if(role == Roles::PoliceClient)
 	{
-		hasEnemy = true;
+		if(end-start > 0)
+			hasEnemy = true;
+		else
+			hasEnemy = false;
 	}
 
 	//视距范围地图信息
@@ -139,6 +219,10 @@ void Game::analyzeINF(string s)
 	splitXYs(subStr, map);
 
 }
+
+//===========================================================================
+///	构建MOV指令
+//===========================================================================
 string Game::buildMOV()
 {
 	stringstream ss;
@@ -190,33 +274,11 @@ string Game::buildMOV()
 	return str;
 }
 
-
-
-void Game::receiveINI(char* str)
-{
-	string s(str);
-	analyzeINI(s);
-}
-void Game::receiveINF(char* str)
-{
-	string s(str);
-	analyzeINF(s);
-	computeMove();
-}
-void Game::sendMOV()
-{
-	string str = buildMOV();
-	char* s = const_cast<char*>(str.c_str());
-	sendMoveToServer(s);
-}
-
-
-/***********************************
-核心的智能算法   PS:目前是随机移动
-************************************/
+//===========================================================================
+///	计算移动
+//===========================================================================
 void Game::computeMove()
 {
-	srand(time(0));
 	if(role == Roles::PoliceClient)
 	{
 		policeMove();
@@ -226,44 +288,194 @@ void Game::computeMove()
 	}
 }
 
-
-void Game::policeMove()				//计算警察下一步
+//===========================================================================
+///	计算警察移动
+//===========================================================================
+void Game::policeMove()		
 {
-	bool hasThief = hasEnemy;
-	int endx;
-	int endy;
-	for(int i = 0; i < thiefNum; i++)
+	if(hasEnemy)
 	{
-		if(thiefs[i].x != -1 && thiefs[i].y != -1)
-		{
-			hasThief = true;
-			endx = thiefs[i].x; endy = thiefs[i].y;
-			break;
-		}
-	}
-	if(hasThief)
-	{
-		for(int i = 0; i < policeNum; i++)
-		{
-			int move = astar(polices[i].x, polices[i].y, endx, endy);
-			if(move < 0) 
-				polices[i].move = Move::Keep;
-			else
-				polices[i].move = (Move)move;
-		}
-		int f = 0;
-		int kk = f*2;
+
+		policePursue();
 	}else
 	{
-		srand(time(0));
+		policeScan();
+	}
+
+}
+
+//===========================================================================
+///	计算小偷移动
+//===========================================================================
+void Game::thiefMove()				
+{
+	if(hasEnemy)
+	{
+		thiefEscape();
+	}else
+	{
+		thiefScan();
+	}
+
+}
+
+//===========================================================================
+///	警察扫描算法
+//===========================================================================
+void Game::policeScan()
+{
+	int rangeWidth = (2*policeRange+1);
+
+	for(int i = 0; i < polices.size(); i++)
+	{
+		if(polices[i].scanToPreX == -1 || polices[i].scanToPreY == -1)
+		{//初始
+			if(abs(polices[i].x) < abs(mapWidth-polices[i].x))
+			{
+				polices[i].scanToPreX = policeRange;
+			}else
+			{
+				polices[i].scanToPreX = mapWidth-1-policeRange;
+			}
+			polices[i].scanToPreY = policeRange + i * rangeWidth;
+			findValidPositionAroundXY(polices[i].scanToPreX, polices[i].scanToPreY, polices[i].scanToX, polices[i].scanToY);
+		}
+		if(map[polices[i].scanToY][polices[i].scanToX] == MapType::Block)
+		{//若目标之前为未知区域，现在为不可访问（block），则重新搜索周边空白区域
+			findValidPositionAroundXY(polices[i].scanToX, polices[i].scanToY, polices[i].scanToX, polices[i].scanToY);
+		}
+		astar(polices[i].x, polices[i].y, polices[i].scanToX, polices[i].scanToY, polices[i].move);	//计算
+		if(abs(polices[i].x-polices[i].scanToX) + abs(polices[i].y-polices[i].scanToY) <= 1)
+		{//完成
+			polices[i].directHoriz = !(polices[i].directHoriz);
+			if(polices[i].directHoriz)
+			{
+				polices[i].scanToPreX = mapWidth-1-polices[i].scanToPreX;
+				findValidPositionAroundXY(polices[i].scanToPreX, polices[i].scanToPreY, polices[i].scanToX, polices[i].scanToY);
+			}else
+			{
+				polices[i].scanToPreY += rangeWidth*polices.size();
+				polices[i].scanToPreY %= mapHeight;
+				findValidPositionAroundXY(polices[i].scanToPreX, polices[i].scanToPreY, polices[i].scanToX, polices[i].scanToY);
+			}
+
+		}
+	}
+}
+
+//===========================================================================
+///	警察追捕算法
+//===========================================================================
+void Game::policePursue()
+{
+	if(lockedThief == -1)
+	{
+		for(int i = 0; i < thiefs.size(); i++)
+		{
+			if(thiefs[i].visible)
+			{
+				lockedThief = i;
+				break;
+			}
+		}
+	}
+	if(lockedPolice = -1)
+	{
+		int minDist = INT_MAX;
+		lockedPolice = 0;
 		for(int i = 0; i < polices.size(); i++)
 		{
-			polices[i].move = (Move)(int)(rand() % 5);
+			int dist = abs(polices[i].x - thiefs[lockedThief].x) +abs(polices[i].y - thiefs[lockedThief].y);
+			if(dist < minDist) 
+			{
+				minDist = dist;
+				lockedPolice = i;
+			}
+		}
+	}
+
+
+	vector<Move> allPolices(polices.size(), Move::Keep);
+
+	vector<bool> policesMark(polices.size(), false);
+	vector<bool> directsMark(4, false);
+
+	int lockedMove = 0;
+	double minValue = INT_MAX;
+	for(int i = 0; i < 4; i++)
+	{
+		double value = calcRadian(polices[lockedPolice].x, polices[lockedPolice].y, thiefs[lockedThief].x, thiefs[lockedThief].y, (Move)i);
+		if(value < minValue)
+		{
+			lockedMove = i;
+			minValue = value;
+		}
+	}
+	allPolices[lockedPolice] = (Move)lockedMove;
+	policesMark[lockedPolice] = true;
+	directsMark[lockedMove] = true;
+
+
+	priority_queue<AngleNode, vector<AngleNode>, AngleNodeCmp> priQueue;
+	for(int i = 0; i < polices.size(); i++)
+	{
+		if(lockedPolice == i) continue;
+		for(int j = 0; j < 4; j++)
+		{
+			double value = calcRadian(polices[i].x, polices[i].y, thiefs[lockedThief].x, thiefs[lockedThief].y, (Move)j);
+			AngleNode tempNode(i, (Move)j, value);
+			priQueue.push(tempNode);
+		}
+	}
+
+	bool policeBeacon = false;
+	bool directBeacon = false;
+	int policeEmptyNum = polices.size();
+	int directEmptyNum = 4;
+
+	while(!priQueue.empty())
+	{
+		AngleNode tempNode = priQueue.top();
+		priQueue.pop();
+		if(policesMark[tempNode.index] == policeBeacon && directsMark[tempNode.direct] == directBeacon)
+		{
+			allPolices[tempNode.index] = (Move)tempNode.direct;
+			policeEmptyNum--;
+			directEmptyNum--;
+			if(policeEmptyNum == 0)
+			{
+				policeEmptyNum = polices.size();
+				policeBeacon = !policeBeacon;
+			}
+			if(directEmptyNum == 0)
+			{
+				directEmptyNum = 4;
+				directBeacon = !directBeacon;
+			}
+		}
+	}
+
+
+	for(int i = 0; i < polices.size(); i++)
+	{
+		if(i == lockedPolice) 
+			astar(polices[i].x, polices[i].y, thiefs[lockedThief].x, thiefs[lockedThief].y, polices[i].move);
+		else
+		{
+			int tox, toy;
+			if(findValidNeighborByDirect(thiefs[lockedThief].x, thiefs[lockedThief].y, allPolices[i],tox, toy))
+				astar(polices[i].x, polices[i].y, tox,toy, polices[i].move);
+			else
+				polices[i].move = Move::Keep;
 		}
 	}
 
 }
-void Game::thiefMove()				//计算小偷下一步
+
+//===========================================================================
+///	小偷扫描算法
+//===========================================================================
+void Game::thiefScan()
 {
 	srand(time(0));
 	for(int i = 0; i < thiefs.size(); i++)
@@ -272,89 +484,175 @@ void Game::thiefMove()				//计算小偷下一步
 	}
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-/***************************
-Astar算法的辅助方法
-******************************/
-void Game::astar_InsertList(list<ANode*> &alist, ANode* node)
+//===========================================================================
+///	小偷逃脱算法
+//===========================================================================
+void Game::thiefEscape()
 {
-	list<ANode*>::iterator iter = alist.begin();
-	while(iter != alist.end())
+	Node sym;
+	sym.x = 0;
+	sym.y = 0;
+	for(int i = 0; i < thiefs.size(); i++)
 	{
-		if((*iter)->total >= node->total) break;
-		iter++;
-	}
-	alist.insert(iter, node);
-
-}
-ANode* Game::astar_RemoveList(list<ANode*> &alist, int x, int y, int step, ANode* parent)
-{
-	list<ANode*>::iterator iter = alist.begin();
-	ANode* aNode = NULL;
-	for(; iter != alist.end(); iter++)
-	{
-		if((*iter)->x == x && (*iter)->y == y)
+		for(int j = 0; j < polices.size(); j++)
 		{
-			if((*iter)->step > step)	//需要更新
-			{
-				aNode = (*iter);
-				aNode->step = step;
-				aNode->total = aNode->step + aNode->remain;
-				aNode->parent = parent;
-
-				alist.remove(*iter);
-				return aNode;
-
-			}
-			return NULL;
+			sym.x += polices[i].x;
+			sym.y += polices[i].y;
 		}
-	}
-
-	return NULL;
-
-}
-void Game::astar_UpdateList(list<ANode*> &alist, int x, int y, int step, ANode* parent)
-{
-	list<ANode*>::iterator iter = alist.begin();
-	ANode* aNode = NULL;
-	for(; iter != alist.end(); iter++)
-	{
-		if((*iter)->x == x && (*iter)->y == y)
+		sym.x /= polices.size();
+		sym.y /= polices.size();
+		sym.x = 2 * thiefs[i].x - sym.x;
+		sym.y = 2 * thiefs[i].y - sym.y;
+		findValidPositionAroundXY(sym.x, sym.y, sym.x, sym.y);			//若在不合理位置，则移动到合理位置
+		if(sym.x == thiefs[i].x && sym.y == thiefs[i].y)
 		{
-			if((*iter)->step > step)	//需要更新
-			{
-				aNode = (*iter);
-				aNode->step = step;
-				aNode->total = aNode->step + aNode->remain;
-				aNode->parent = parent;
 
-				alist.remove(*iter);
-				astar_InsertList(alist, aNode);
-				return;
+		}
+		astar(thiefs[i].x, thiefs[i].y, sym.x, sym.y, polices[i].move);
+	}
+}
+
+//===========================================================================
+///	计算向量夹角：向量(center->xy) 与 向量(move)的夹角
+//===========================================================================
+double Game::calcRadian(int x, int y, int centerx, int centery, Move move)
+{
+	int movex[] = {1,0,-1,0};
+	int movey[] = {0,1,0,-1};
+
+	int vx1 = x - centerx;
+	int vy1 = y - centery;
+	int vx2 = movex[move];
+	int vy2 = movey[move];
+
+	double cosRadian = (vx1*vx2+vy1*vy2)/(sqrt(vx1*vx1+vy1*vy1)*sqrt(vx2*vx2+vy2*vy2));
+	double radian = acos(cosRadian);  //弧度
+	return radian;
+}
+
+//===========================================================================
+///	搜索(x,y)及其周围最近的有效位置，赋值给tox,toy
+//===========================================================================
+void Game::findValidPositionAroundXY(int x, int y, int& outx, int& outy, bool isThief)
+{
+	if(x >= 0 && x < mapWidth && y >= 0 && y < mapHeight && map[y][x] != MapType::Block)
+	{
+		bool isPoliceLoc = false;
+		if(isThief)
+		{
+			for(int i = 0; i < polices.size(); i++)
+			{
+				if(x == polices[i].x && y == polices[i].y)
+				{
+					isPoliceLoc = true;
+					break;
+				}
 			}
+		}
+
+		if(!isPoliceLoc)
+		{
+			outx = x;
+			outy = y;
 			return;
 		}
 	}
-	return;
+
+	int movex[] = {1,0,-1,0};
+	int movey[] = {0,1,0,-1};
+
+	if(x < 0) x = 0;
+	if(x >= mapWidth) x = mapWidth-1;
+	if(y < 0) y = 0;
+	if(y >= mapHeight) y = mapWidth-1;
+
+	vector<vector<bool> >  marks(mapHeight, vector<bool>(mapWidth, false));
+	queue<pair<int,int> > queue;
+	queue.push(make_pair(x,y));
+	marks[y][x] = true;
+	while(!queue.empty())
+	{
+		pair<int,int> node = queue.front();
+		queue.pop();
+
+		if(map[node.second][node.first] != MapType::Block)
+		{
+			bool isPoliceLoc = false;
+			if(isThief)
+			{//若是小偷找路径，则警察所在位置也不可通过
+				for(int k = 0; k < polices.size(); k++)
+				{
+					if(node.first == polices[k].x && node.second == polices[k].y)
+					{
+						isPoliceLoc = true;
+						break;
+					}
+				}
+			}
+			if(!isPoliceLoc)
+			{
+				outx = node.first;
+				outy = node.second;
+				return;
+			}
+		}
+
+
+		for(int i = 0; i < 4; i++)
+		{
+			int newx = node.first + movex[i];
+			int newy = node.second + movey[i];
+			if(newx >= 0 && newx < mapWidth && newy >= 0 && newy < mapHeight && marks[newy][newx] == false)
+			{
+				queue.push(make_pair(newx, newy));
+				marks[newy][newx] = true;
+			}
+		}
+	}
 
 }
 
-/***************************
-Astar算法 	return int:0=east, 1=south, 2=west, 3=north, 4=keep
-******************************/
-int Game::astar(int x1, int y1, int x2, int y2)
+//===========================================================================
+///	搜索(x,y)在指定方向的一步可达位置，若不存在，则顺时针换方向寻找
+//===========================================================================
+bool Game::findValidNeighborByDirect(int x, int y, Move direct, int& outx, int& outy, bool isRecursion)
+{
+	int movex[] = {1,0,-1,0};
+	int movey[] = {0,1,0,-1};
+	int newx = x + movex[direct];
+	int newy = y + movey[direct];
+
+	if(newx >= 0 && newx < mapWidth && newy >= 0 && newy < mapHeight && map[newy][newx] != MapType::Block)
+	{
+		outx = newx;
+		outy = newy;
+		return true;
+	}
+
+	if(newx < 0 || newx >= mapWidth || newy < 0 || newy >= mapHeight)
+	{//在地图外
+		outx = x;
+		outy = y;
+		return true;
+	}
+
+	if(isRecursion) return false;	//若是递归调用，则不执行后面的语句
+
+	if(map[newy][newx] == MapType::Block)
+	{//位置不可用
+		for(int i = 1; i <= 3; i++)
+		{
+			Move newDirect = (Move)( (direct + i) % 4);
+			if(findValidNeighborByDirect(x, y, newDirect, outx, outy, true)) return true;
+		}
+	}
+	return false;
+}
+
+//===========================================================================
+///	A*算法
+//===========================================================================
+void Game::astar(int x1, int y1, int x2, int y2, Move& outMove, bool isThief)
 {
 	int movex[] = {1,0,-1,0};
 	int movey[] = {0,1,0,-1};
@@ -364,22 +662,34 @@ int Game::astar(int x1, int y1, int x2, int y2)
 	int endx = x2;
 	int endy = y2;
 
-	ANode startNode(x1, y1, 0, abs(x1-x2)+abs(y1-y2));
+	ANode startNode(x1, y1, 0, (x1-x2)*(x1-x2)+(y1-y2)*(y1-y2));
 
-	vector<vector<int> > marks(mapHeight, vector<int>(mapWidth, 0));	//0=未访问 1=openlist 2=closelist
+	openList.clear();
+	closeList.clear();
+	multiset<ANode*>::iterator openEmpty = openList.end();
+	marks.assign(mapHeight, vector<int>(mapWidth, 0));
 
-	list<ANode*> openList;
-	list<ANode*> closeList;
+	if(stores.size() != mapHeight || stores[0].size() == mapWidth)
+		stores.resize(mapHeight, vector<multiset<ANode*>::iterator >(mapWidth, openEmpty));
+
+
 	ANode* findNode = NULL;
 
-	openList.push_back(&startNode);
+	multiset<ANode*>::iterator tempIter = openList.insert(&startNode);
+
 	marks[startNode.y][startNode.x] = 1;
+	stores[startNode.y][startNode.x] = tempIter;
+
 	while(!openList.empty())
 	{
-		ANode* node = openList.front();
-		openList.pop_front();
-		closeList.push_back(node);
+		tempIter = openList.begin();
+		ANode* node = *tempIter;
+		openList.erase(tempIter);
+
+		tempIter = closeList.insert(node);
+
 		marks[node->y][node->x] = 2;
+		stores[node->y][node->x] = tempIter;
 
 		if(node->x == endx && node->y == endy)
 		{
@@ -393,51 +703,108 @@ int Game::astar(int x1, int y1, int x2, int y2)
 			int newy = node->y + movey[i];
 			if(newx >= 0 && newx < mapWidth && newy >= 0 && newy < mapHeight && map[newy][newx] != MapType::Block)
 			{
-				if(marks[newy][newx] == 0)	//未访问
-				{
-					ANode* newNode = new ANode(newx, newy, node->step+1, abs(newx-endx)+abs(newy-endy), node);
-					astar_InsertList(openList, newNode);
-					marks[newy][newx] = 1;
-				}else if(marks[newy][newx] == 1)	//openlist
-				{
-					int newStep = node->step + 1;
-					astar_UpdateList(openList, newx, newy, newStep, node);
-				}else if(marks[newy][newx] == 2)	//closelist
-				{
-					int newStep = node->step + 1;
-					ANode* newNode = astar_RemoveList(closeList, newx, newy, newStep, node);
-					if(newNode != NULL)
+				bool isPoliceLoc = false;
+				if(isThief)	
+				{//若是小偷找路径，则警察所在位置也不可通过
+					for(int k = 0; k < polices.size(); k++)
 					{
-						astar_InsertList(openList, newNode);
-						marks[newy][newx] = 1;
+						if(newx == polices[i].x && newy == polices[i].y)
+						{
+							isPoliceLoc = true;
+							break;
+						}
 					}
 				}
+				if(!isPoliceLoc) 
+				{
+					if(marks[newy][newx] == 0)	//未访问
+					{
+						ANode* newNode = new ANode(newx, newy, node->step+1, (newx-endx)*(newx-endx)+(newy-endy)*(newy-endy), node);
+						tempIter = openList.insert(newNode);
+
+						marks[newy][newx] = 1;
+						stores[newy][newx] = tempIter;
+					}else if(marks[newy][newx] == 1)	//openlist
+					{
+						int newStep = node->step + 1;
+						tempIter = stores[newy][newx];
+						ANode* newNode = (*tempIter);
+						if(newNode->step > newStep)
+						{
+							openList.erase(tempIter);
+							newNode->step = newStep;
+							newNode->total = newNode->step + newNode->remain;
+							newNode->parent = node;
+							tempIter = openList.insert(newNode);
+							stores[newy][newx] = tempIter;
+						}
+					}else if(marks[newy][newx] == 2)	//closelist
+					{
+						int newStep = node->step + 1;
+						tempIter = stores[newy][newx];
+						ANode* newNode = (*tempIter);
+						if(newNode->step > newStep)
+						{
+							closeList.erase(tempIter);
+							newNode->step = newStep;
+							newNode->total = newNode->step + newNode->remain;
+							newNode->parent = node;
+							tempIter = openList.insert(newNode);
+							marks[newy][newx] == 1;
+							stores[newy][newx] = tempIter;
+						}
+
+					}
+				}
+
 			}
 		}
 
 	}
-
+	
 	if(findNode == NULL)
 	{//没找到
-		return -1;
+		srand(time(0));
+		outMove = (Move)(int)(rand() % 5);
+		return;
 	}
 
 	if(findNode->parent != NULL)
 		while(findNode->parent->parent != NULL)
 			findNode = findNode->parent;
 	else
-		return 4;	//原地重合
+	{
+		outMove = Move::Keep;
+		return;
+	}
 
 	//0=east, 1=south, 2=west, 3=north, 4=keep
 	ANode* parentNode = findNode->parent;
 	if(parentNode->x < findNode->x)
-		return 0;						
+	{
+		outMove = Move::East;
+		return;		
+	}
 	else if(parentNode->x > findNode->x)
-		return 2;
+	{
+		outMove = Move::West;
+		return;
+	}
 	if(parentNode->y < findNode->y)
-		return 1;
+	{
+		outMove = Move::South;
+		return;
+	}
 	else if(parentNode->y > findNode->y)
-		return 3;
-	return -1;
+	{
+		outMove = Move::North;
+		return;
+	}
+
+	srand(time(0));
+	outMove = (Move)(int)(rand() % 5);
+	return;
 
 }
+
+

@@ -6,12 +6,14 @@
 #include "recvCmd.h"
 #include "sendCmd.h"
 
+
 string teamName="";
 string serverIp="";
 ushort serverPort=0;
 string myRole=""; //"POL" OR "THI"
 ushort localPort=0;
 Game game;
+
 
 
 int checkPara(int argc, _TCHAR* argv[])
