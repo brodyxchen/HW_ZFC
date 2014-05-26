@@ -161,8 +161,16 @@ void Game::analyzeINI(string s)
 		thiefs[i].scanToX = -1;
 		thiefs[i].scanToY = -1;
 		thiefs[i].directHoriz = false;
-		if(mapHeight >= mapWidth) polices[i].isHorizScan = true;
-		else polices[i].isHorizScan = false;
+
+		srand(time(0));
+		if(mapHeight >= mapWidth)
+		{
+			polices[i].isHorizScan = (rand() % 4) == 1 ? false : true;
+		}
+		else
+		{
+			polices[i].isHorizScan = (rand() % 4) == 1 ? true : false;
+		}
 	}
 
 	start = s.find('<', end+1)+1;
@@ -178,6 +186,8 @@ void Game::analyzeINI(string s)
 
 	if(role == Roles::PoliceClient)
 		calcScanLine();
+
+
 }
 
 //===========================================================================
@@ -411,6 +421,24 @@ void Game::calcScanLine()
 		}
 	}
 
+	//初始化螺旋搜索的距离
+	helixDists.resize(201,0);
+	for(int i = 0; i < helixDists.size(); i++)
+	{
+		helixDists[i] = (i/2)+1;
+	}
+
+	int minDist = INT_MAX;
+	for(int i = 0; i < polices.size(); i++)
+	{
+		int dist = abs(polices[i].x - mapWidth/2) + abs(polices[i].y - mapHeight/2);
+		if(dist <= minDist)
+		{
+			soloPolice = i;
+			minDist = dist;
+		}
+	}
+
 }
 
 
@@ -427,6 +455,7 @@ void Game::policeScan()
 
 	for(int i = 0; i < polices.size(); i++)
 	{
+		if(i == soloPolice) continue;
 		if(polices[i].isHorizScan)
 		{
 			if(polices[i].scanToPreX == -1 || polices[i].scanToPreY == -1)
@@ -550,7 +579,117 @@ void Game::policeScan()
 
 		}
 	}
+
+	helixScan();
 }
+
+void Game::helixScan()
+{
+	if(polices[soloPolice].scanToPreX == -1 || polices[soloPolice].scanToPreY == -1)
+	{//初始
+		polices[soloPolice].scanToPreX = mapWidth / 2;
+		polices[soloPolice].scanToPreY = mapHeight / 2;
+		helixDistIndex = -1;
+		if(mapWidth >= mapHeight)
+		{
+			soloDirect = Move::North;
+		}else
+		{
+			soloDirect = Move::East;
+		}
+
+		findValidPositionAroundXY(polices[soloPolice].scanToPreX, polices[soloPolice].scanToPreY, polices[soloPolice].scanToX, polices[soloPolice].scanToY);
+
+		if(polices[soloPolice].scanToX == polices[soloPolice].x && polices[soloPolice].scanToY == polices[soloPolice].y)
+		{//若当前就在这个位置，则重新计算位置 
+			int newDirect = soloDirect + 1;
+			soloDirect = (Move)((newDirect + 4) % 4);
+			helixDistIndex++;
+
+			int dist = helixDists[helixDistIndex];
+			if(soloDirect == Move::East)
+				polices[soloPolice].x += dist*(2*policeRange+1);
+			else if(soloDirect == Move::South)
+				polices[soloPolice].y += dist*(2*policeRange+1);
+			else if(soloDirect == Move::West)
+				polices[soloPolice].x -= dist*(2*policeRange+1);
+			else if(soloDirect == Move::North)
+				polices[soloPolice].y -= dist*(2*policeRange+1);
+
+			if(polices[soloPolice].x < 0)
+			{
+				int rdist = abs(polices[soloPolice].x / (2*policeRange+1))+1;
+				polices[soloPolice].x += rdist*(2*policeRange+1);
+			}
+			if(polices[soloPolice].x >= mapWidth)
+			{
+				int rdist = abs( (polices[soloPolice].x-mapWidth+1) / (2*policeRange+1) )+1;
+				polices[soloPolice].x -= rdist*(2*policeRange+1);
+			}
+			if(polices[soloPolice].y < 0)
+			{
+				int rdist = abs(polices[soloPolice].y / (2*policeRange+1))+1;
+				polices[soloPolice].y += rdist*(2*policeRange+1);
+			}
+			if(polices[soloPolice].y >= mapHeight)
+			{
+				int rdist = abs( (polices[soloPolice].y-mapHeight+1) / (2*policeRange+1) )+1;
+				polices[soloPolice].y -= rdist*(2*policeRange+1);
+			}
+
+			findValidPositionAroundXY(polices[soloPolice].scanToPreX, polices[soloPolice].scanToPreY, polices[soloPolice].scanToX, polices[soloPolice].scanToY);
+		}
+
+	}
+
+	if(map[polices[soloPolice].scanToY][polices[soloPolice].scanToX] == MapType::Block)
+	{//若目标之前为未知区域，现在为不可访问（block），则重新搜索周边空白区域
+		findValidPositionAroundXY(polices[soloPolice].scanToPreX, polices[soloPolice].scanToPreY, polices[soloPolice].scanToX, polices[soloPolice].scanToY);
+	}
+	astar(polices[soloPolice].x, polices[soloPolice].y, polices[soloPolice].scanToX, polices[soloPolice].scanToY, polices[soloPolice].move);	//计算
+
+	if(abs(polices[soloPolice].x-polices[soloPolice].scanToX) + abs(polices[soloPolice].y-polices[soloPolice].scanToY) <= 1)
+	{//完成  改目的地
+
+		int newDirect = soloDirect + 1;
+		soloDirect = (Move)((newDirect + 4) % 4);
+		helixDistIndex++;
+		int dist = helixDists[helixDistIndex];
+
+		if(soloDirect == Move::East)
+			polices[soloPolice].scanToPreX += dist*(2*policeRange+1);
+		else if(soloDirect == Move::South)
+			polices[soloPolice].scanToPreY += dist*(2*policeRange+1);
+		else if(soloDirect == Move::West)
+			polices[soloPolice].scanToPreX -= dist*(2*policeRange+1);
+		else if(soloDirect == Move::North)
+			polices[soloPolice].scanToPreY -= dist*(2*policeRange+1);
+
+		if(polices[soloPolice].scanToPreX < 0)
+		{
+			int rdist = abs(polices[soloPolice].scanToPreX / (2*policeRange+1))+1;
+			polices[soloPolice].scanToPreX += rdist*(2*policeRange+1);
+		}
+		if(polices[soloPolice].scanToPreX >= mapWidth)
+		{
+			int rdist = abs( (polices[soloPolice].scanToPreX-mapWidth+1) / (2*policeRange+1) )+1;
+			polices[soloPolice].scanToPreX -= rdist*(2*policeRange+1);
+		}
+		if(polices[soloPolice].scanToPreY < 0)
+		{
+			int rdist = abs(polices[soloPolice].scanToPreY / (2*policeRange+1))+1;
+			polices[soloPolice].scanToPreY += rdist*(2*policeRange+1);
+		}
+		if(polices[soloPolice].scanToPreY >= mapHeight)
+		{
+			int rdist = abs( (polices[soloPolice].scanToPreY-mapHeight+1) / (2*policeRange+1) )+1;
+			polices[soloPolice].scanToPreY -= rdist*(2*policeRange+1);
+		}
+		findValidPositionAroundXY(polices[soloPolice].scanToPreX, polices[soloPolice].scanToPreY, polices[soloPolice].scanToX, polices[soloPolice].scanToY);
+	}
+
+}
+
 
 //===========================================================================
 ///	警察追捕算法

@@ -104,6 +104,11 @@ private:
 
 	vector<Node> polices;			//警察 k号位置存储id=k的警察数据（位置XY，下一步应该如何移动等）
 	int lockedPolice;				//追击的警察Id，其他围捕
+	int soloPolice;
+	Move soloDirect;
+	vector<int> helixDists;
+	int helixDistIndex;
+
 	vector<Node> thiefs;			//小偷
 	int lockedThief;				//被追击的小偷Id
 
@@ -149,7 +154,9 @@ private:
 	// 警察的移动
 	//============================================================================
 	void policeScan();
+	void helixScan();
 	void policePursue();
+
 
 	//============================================================================
 	// 小偷的移动
@@ -164,6 +171,7 @@ private:
 	bool findValidNeighborByDirect(int x, int y, Move direct, int& outx, int& outy, bool isRecursion=false);	//搜索(x,y)在指定方向的一步可达位置，若不存在，则顺时针换方向寻找			
 	double calcRadian(int x, int y, int centerx, int centery, Move move);										//计算向量夹角：向量(center->xy) 与 向量(move)的夹角
 	void calcScanLine();
+
 
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
