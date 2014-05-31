@@ -6,6 +6,7 @@
 #include "recvCmd.h"
 #include "sendCmd.h"
 
+//#include <windows.h>
 
 string teamName="";
 string serverIp="";
@@ -15,9 +16,22 @@ ushort localPort=0;
 Game game;
 
 
+//void Wchar_tToString(std::string& szDst, _TCHAR* wchar)
+//{
+//	wchar_t * wText = wchar;
+//	DWORD dwNum = WideCharToMultiByte(CP_OEMCP,NULL,wText,-1,NULL,0,NULL,FALSE);// WideCharToMultiByte的运用
+//	char *psText;  // psText为char*的临时数组，作为赋值给std::string的中间变量
+//	psText = new char[dwNum];
+//	WideCharToMultiByte (CP_OEMCP,NULL,wText,-1,psText,dwNum,NULL,FALSE);// WideCharToMultiByte的再次运用
+//	szDst = psText;// std::string赋值
+//	delete []psText;// psText的清除
+//}
+
 
 int checkPara(int argc, _TCHAR* argv[])
 {
+	//string teamName2, serverIp2, serverPort2, myRole2, localPort2;
+
     if(argc!=6)
     {
         log("错误：参数个数错误(%d)！", argc);
@@ -25,11 +39,24 @@ int checkPara(int argc, _TCHAR* argv[])
         goto checkParaErr;
     }
 
-    teamName=argv[1];
-    serverIp=argv[2];
-    serverPort = atoi(argv[3]);
-    myRole = argv[4];
-    localPort = atoi(argv[5]);
+	//Wchar_tToString(teamName2, argv[1]);
+	//Wchar_tToString(serverIp2, argv[2]);
+	//Wchar_tToString(serverPort2, argv[3]);
+	//Wchar_tToString(myRole2, argv[4]);
+	//Wchar_tToString(localPort2, argv[5]);
+
+	//teamName=teamName2;
+	//serverIp=serverIp2;
+	//serverPort = stoi(serverPort2);
+	//myRole = myRole2;
+	//localPort = stoi(localPort2.c_str());
+
+
+	teamName=argv[1];
+	serverIp=argv[2];
+	serverPort = atoi(argv[3]);
+	myRole = argv[4];
+	localPort = atoi(argv[5]);
 
     log("getPara: teamName[%s] serverIp[%s] serverPort[%u] myRole[%s] localPort[%u]", 
         teamName.c_str(), serverIp.c_str(), serverPort, myRole.c_str(), localPort);

@@ -145,6 +145,7 @@ void Game::analyzeINI(string s)
 		polices[i].scanToX = -1;
 		polices[i].scanToY = -1;
 		polices[i].directHoriz = false;
+		polices[i].sober = 0;
 		if(mapHeight >= mapWidth) polices[i].isHorizScan = true;
 		else polices[i].isHorizScan = false;
 	}
@@ -336,7 +337,8 @@ void Game::policeMove()
 		policePursue();
 	}else
 	{
-		policeScan();
+		policeScan2();
+		//policeScan();
 	}
 
 }
@@ -440,7 +442,72 @@ void Game::calcScanLine()
 	}
 
 }
+bool Game::isValidXY(int x, int y)
+{
+	if(x >= 0 && x < mapWidth && y >= 0 && y < mapHeight && map[y][x] != MapType::Block) return true;
+	return false;
+}
 
+bool Game::isValidMove(int x, int y, Move move)
+{
+	int movex[] = {1,0,-1,0};
+	int movey[] = {0,1,0,-1};
+	int newx = x + movex[move];
+	int newy = y + movey[move];
+	return isValidXY(newx, newy);
+}
+
+void Game::policeScan2()
+{
+	srand(time(0));
+	int movex[] = {1,0,-1,0};
+	int movey[] = {0,1,0,-1};
+
+	int newx, newy;
+	for(int i = 0; i < polices.size(); i++)
+	{
+		//polices[i].move = (Move)(int)(rand() % 5);
+		if(polices[i].scanToPreX == -1 || polices[i].scanToPreY == -1)
+		{//初始时
+			polices[i].move = (Move)(int)(rand() % 4);
+			polices[i].scanToPreX = mapWidth / 2;
+			polices[i].scanToPreY = mapHeight / 2;
+		}
+
+		Move lastMove = polices[i].move;
+		int count = 0;
+		while(count <= 20 && !isValidMove(polices[i].x, polices[i].y, polices[i].move))
+		{
+			polices[i].move = (Move)(int)(rand() % 4);
+			count++;
+		}
+		if(count >= 20) polices[i].move = Move::Keep;
+
+		if(lastMove == polices[i].move)	//若方向没变，说明一直在直走，赋予随机性
+		{
+			polices[i].sober++;
+			bool isChangeMove = (int)(rand() % (4+polices[i].sober)) == 2 ? true : false;
+			if(isChangeMove)
+			{
+				polices[i].move = (Move)(int)(rand() % 4);
+				count = 0;
+				while(count <= 20 && !isValidMove(polices[i].x, polices[i].y, polices[i].move))
+				{
+					polices[i].move = (Move)(int)(rand() % 4);
+					count++;
+				}
+				if(count >= 20) polices[i].move = Move::Keep;
+			}
+			if(lastMove == polices[i].move)
+			{
+				polices[i].sober = 0;
+			}
+		}else
+		{
+			polices[i].sober = 0;
+		}
+	}
+}
 
 //===========================================================================
 ///	警察扫描算法
@@ -451,6 +518,8 @@ void Game::policeScan()
 	int bandWidth = polices.size() * rangeWidth;
 	int maxVerBand = mapWidth / bandWidth;
 	int maxHorBand = mapHeight / bandWidth;
+	if(maxVerBand == 0) maxVerBand = 1;
+	if(maxHorBand == 0) maxHorBand = 1;
 
 
 	for(int i = 0; i < polices.size(); i++)
@@ -1004,16 +1073,16 @@ void Game::astar(int x1, int y1, int x2, int y2, Move& outMove, bool isThief)
 
 	openList.clear();
 	closeList.clear();
-	multiset<ANode*>::iterator openEmpty = openList.end();
+	multiset<ANode*>::const_iterator openEmpty = openList.end();
 	marks.assign(mapHeight, vector<int>(mapWidth, 0));
 
 	if(stores.size() != mapHeight || stores[0].size() == mapWidth)
-		stores.resize(mapHeight, vector<multiset<ANode*>::iterator >(mapWidth, openEmpty));
+		stores.resize(mapHeight, vector<multiset<ANode*>::const_iterator >(mapWidth, openEmpty));
 
 
 	ANode* findNode = NULL;
 
-	multiset<ANode*>::iterator tempIter = openList.insert(&startNode);
+	multiset<ANode*>::const_iterator tempIter = openList.insert(&startNode);
 
 	marks[startNode.y][startNode.x] = 1;
 	stores[startNode.y][startNode.x] = tempIter;

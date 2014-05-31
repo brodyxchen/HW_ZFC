@@ -1,3 +1,4 @@
+#pragma once
 #include<iostream>
 #include<vector>
 #include<list>
@@ -62,6 +63,8 @@ private:
 		bool directHoriz;	//当前是否在扫描水平线
 
 		bool isHorizScan;	//总体上，是在做横向还是纵向扫描
+		int sober;
+
 	};
 
 	//============================================================================
@@ -157,9 +160,11 @@ private:
 	//============================================================================
 	void policeScan();				//警察扫描（刷子法）
 	void helixScan();				//螺旋扫描（螺旋法），只有一个警察使用
+	void policeScan2();
 	void policePursue();			//警察追捕
 
-
+	bool isValidXY(int x, int y);
+	bool isValidMove(int x, int y, Move move);
 	//============================================================================
 	// 小偷的移动
 	//============================================================================
@@ -213,7 +218,7 @@ private:
 	multiset<ANode*, ANodeLess> openList;
 	multiset<ANode*, ANodeLess> closeList;
 	vector<vector<int> > marks;								//0=未访问 1=openlist 2=closelist
-	vector<vector<multiset<ANode*>::iterator > > stores;	//存储每个位置对应的ANode迭代器
+	vector<vector<multiset<ANode*>::const_iterator > > stores;	//存储每个位置对应的ANode迭代器
 
 	//============================================================================
 	// 寻路算法A*
